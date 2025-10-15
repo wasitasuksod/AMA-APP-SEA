@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Custom Styles for Warm and Friendly Theme */
         body { font-family: 'Nunito', sans-serif; background-color: #FDF4ED; } /* Softer background */
         .card { background-color: white; border: 1px solid #FAD7A0; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06); } /* Softer shadow, warm border */
         .btn-primary { background-color: #EF6C00; color: white; transition: background-color 0.2s; } /* Orange accent */
@@ -16,6 +15,7 @@
         .pending-question { background-color: #FFFBEB; } /* Soft yellow */
         .answered-question { background-color: #E8F5E9; } /* Soft green */
         .grandma-title { font-family: 'Comfortaa', cursive; color: #D84315; } /* Playful font for title */
+        .mood-count { font-size: 2.5rem; }
         .mood-btn { text-align: center; font-weight: 600; cursor: pointer; }
     </style>
 </head>
@@ -59,6 +59,8 @@
                             </select>
                         </div>
                         
+                        <!-- Mood section REMOVED from this form -->
+
                         <div>
                             <label for="question-text" class="block text-sm font-medium text-gray-700 mb-1">Your Question (Keep it sweet!):</label>
                             <textarea id="question-text" rows="3" required
@@ -144,7 +146,29 @@
 
         // IMPORTANT: Global variables provided by the canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-grandma-ama';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        // =====================================================================================
+        // !!! YOU MUST EDIT THIS SECTION WHEN DEPLOYING ON GITHUB PAGES !!!
+        // Replace the placeholder values below with your actual Firebase project credentials 
+        // copied from your Firebase Console's project settings (Web App config).
+        // =====================================================================================
+        const manualFirebaseConfig = {
+            apiKey: "AIzaSyCrPeqdDcOdB1DRWBCNWFu0j5fNvL65gwY",
+            authDomain: "ama-app-f461f.firebaseapp.com",
+            projectId: "ama-app-f461f",
+            storageBucket: "ama-app-f461f.firebasestorage.app",
+            messagingSenderId: "180943696745",
+            appId: "1:180943696745:web:348809822d866e7fb2c3f8",
+            measurementId: "G-0H12D293TL"
+        };
+        // =====================================================================================
+        
+        // This logic ensures the app uses the correct config (injected or manual).
+        const injectedConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const firebaseConfig = Object.keys(injectedConfig).length > 0
+            ? injectedConfig 
+            : manualFirebaseConfig;
+        
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth, userId = null;
@@ -163,12 +187,14 @@
          */
         async function initFirebase() {
             setLogLevel('Debug');
-            if (Object.keys(firebaseConfig).length === 0) {
-                console.error("Firebase configuration is missing.");
-                document.getElementById('loading-message').textContent = "Error: Firebase configuration is missing.";
+            
+            // Check if we still have the placeholder config (meaning neither injected nor manual was filled in)
+            if (Object.keys(firebaseConfig).length === 0 || firebaseConfig.apiKey === "YOUR_API_KEY") {
+                console.error("Firebase configuration is missing or using placeholder.");
+                document.getElementById('loading-message').textContent = "Error: Firebase config missing. Please update the 'manualFirebaseConfig' in the script tag to run outside the Canvas environment.";
                 return;
             }
-
+            
             try {
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
@@ -225,6 +251,7 @@
         
         /**
          * Renders the list of questions and answers.
+         * Note: Mood is NO LONGER rendered here, as it's a separate action.
          */
         function renderQuestions(questions) {
             const listContainer = document.getElementById('questions-list');
@@ -243,6 +270,8 @@
                 const cardClasses = isAnswered ? 'answered-question' : 'pending-question';
                 const timeStr = q.timestamp && q.timestamp.toDate ? q.timestamp.toDate().toLocaleString() : 'Just now';
                 
+                // Removed employeeMood display from this section
+
                 const questionHTML = `
                     <div class="p-4 card rounded-lg ${cardClasses}">
                         <div class="flex justify-between items-start">
@@ -251,7 +280,7 @@
                                 ${isAnswered ? 'ANSWERED' : 'PENDING'}
                             </span>
                         </div>
-                        <!-- Display target -->
+                        <!-- Display target only -->
                         <p class="text-sm text-gray-600 mb-2">
                             Addressed to: <span class="font-bold text-[#D84315]">${targetName}</span>
                         </p>
@@ -298,6 +327,7 @@
             const form = document.getElementById('question-form');
             const questionText = document.getElementById('question-text').value.trim();
             const managementTarget = document.getElementById('management-target').value;
+            // employeeEmotion removed from submission logic here
             const isAnonymous = document.getElementById('is-anonymous').checked;
             const submitBtn = document.getElementById('submit-btn');
 
@@ -364,8 +394,15 @@
 
             } catch (error) {
                 console.error("Error submitting mood:", error);
-                // NOTE: Using console error instead of alert
-                console.error("Failed to record mood. Check console for details.");
+                // NOTE: Using a simple DOM message instead of alert()
+                const msg = document.getElementById('mood-message');
+                msg.textContent = `Error recording mood. See console.`;
+                msg.classList.remove('hidden');
+                msg.classList.add('text-red-600');
+                setTimeout(() => {
+                    msg.classList.add('hidden');
+                    msg.classList.remove('text-red-600');
+                }, 4000);
             }
         }
 
@@ -413,25 +450,24 @@
                 "Neutral 😐", "High Workload 😥", "Stressed 😟"
             ];
 
-            // Filter to include only moods with a count > 0 for display
-            const activeMoods = moodOrder.filter(mood => counts[mood] > 0);
-
-            activeMoods.forEach(mood => {
+            moodOrder.forEach(mood => {
                 const count = counts[mood] || 0;
-                const percentage = total > 0 ? ((count / total) * 100).toFixed(0) : 0;
-                
-                const moodItem = `
-                    <div class="flex flex-col items-center p-2 bg-white rounded-lg border border-gray-100 shadow-sm">
-                        <span class="text-2xl font-bold text-gray-800">${count}</span>
-                        <span class="text-xs text-gray-500">${mood}</span>
-                        <span class="text-xs font-semibold mt-1 text-[#EF6C00]">${percentage}%</span>
-                    </div>
-                `;
-                summaryContainer.insertAdjacentHTML('beforeend', moodItem);
+                if (count > 0) {
+                    const percentage = total > 0 ? ((count / total) * 100).toFixed(0) : 0;
+                    
+                    const moodItem = `
+                        <div class="flex flex-col items-center p-2 bg-white rounded-lg border border-gray-100 shadow-sm">
+                            <span class="text-2xl font-bold text-gray-800">${count}</span>
+                            <span class="text-xs text-gray-500">${mood}</span>
+                            <span class="text-xs font-semibold mt-1 text-[#EF6C00]">${percentage}%</span>
+                        </div>
+                    `;
+                    summaryContainer.insertAdjacentHTML('beforeend', moodItem);
+                }
             });
              if (total > 0) {
                 const totalItem = `
-                    <div class="flex flex-col items-center p-2 bg-gray-100 rounded-lg col-span-2 mt-2">
+                    <div class="flex flex-col items-center p-2 bg-gray-100 rounded-lg col-span-2">
                         <span class="text-xl font-bold text-gray-800">Total Check-ins: ${total} (Last 50)</span>
                     </div>
                 `;
@@ -439,7 +475,7 @@
             }
         }
 
-        // --- Management Answer Modal Logic ---
+        // --- Management Answer Modal Logic (Unchanged) ---
 
         function openAnswerModal(id, text) {
             selectedQuestionId = id;
